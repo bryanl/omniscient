@@ -11,6 +11,8 @@ import (
 var (
 	defaultNoteRepository NoteRepository
 	defaultHealth         *Health
+
+	revision string
 )
 
 func init() {
@@ -62,6 +64,7 @@ func NewApp(opts ...AppOption) (*App, error) {
 	e.Delete("/notes/:id", a.deleteNote())
 
 	e.Get("/healthz", a.healthz())
+	e.Get("/app/info", a.appInfo())
 
 	if a.health == nil {
 		return nil, errors.New("no health checker")
@@ -191,5 +194,22 @@ func (a *App) healthz() echo.HandlerFunc {
 		}
 
 		return c.NoContent(http.StatusInternalServerError)
+	}
+}
+
+type appInfo struct {
+	Revision string `json:"revision"`
+}
+
+func (a *App) appInfo() echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		ai := appInfo{
+			Revision: revision,
+		}
+		if ai.Revision == "" {
+			ai.Revision = "dev"
+		}
+
+		return c.JSON(http.StatusOK, ai)
 	}
 }

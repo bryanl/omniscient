@@ -172,3 +172,21 @@ func TestAppHealthCheck(t *testing.T) {
 		assert.Equal(t, "OK", string(body))
 	})
 }
+
+func TestAppInfo(t *testing.T) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
+		u.Path = "/app/info"
+
+		res, err := http.Get(u.String())
+		assert.NoError(t, err)
+
+		defer res.Body.Close()
+
+		var ai appInfo
+		err = json.NewDecoder(res.Body).Decode(&ai)
+		assert.NoError(t, err)
+
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+		assert.Equal(t, "dev", ai.Revision)
+	})
+}
