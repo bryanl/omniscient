@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
+	el "github.com/deoxxa/echo-logrus"
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 )
 
 var (
@@ -55,6 +57,10 @@ func NewApp(opts ...AppOption) (*App, error) {
 			return nil, err
 		}
 	}
+
+	// middleware
+	e.Use(el.New())
+	e.Use(middleware.Recover())
 
 	// routes
 	e.Post("/notes", a.createNote())

@@ -2,11 +2,25 @@
 	"version": 0,
 	"dependencies": [
 		{
+			"importpath": "github.com/Sirupsen/logrus",
+			"repository": "https://github.com/Sirupsen/logrus",
+			"revision": "4b6ea7319e214d98c938f12692336f7ca9348d6b",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/davecgh/go-spew/spew",
 			"repository": "https://github.com/davecgh/go-spew",
 			"revision": "5215b55f46b2b919f50a1df0eaa5886afe4e3b3d",
 			"branch": "master",
 			"path": "/spew",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/deoxxa/echo-logrus",
+			"repository": "https://github.com/deoxxa/echo-logrus",
+			"revision": "9a7e6e11e56b86acf9433023b21166b75d596899",
+			"branch": "master",
 			"notests": true
 		},
 		{
@@ -17,11 +31,33 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/labstack/gommon/color",
+			"repository": "https://github.com/labstack/gommon",
+			"revision": "f4ba73f8bcf88df1524069c117f7878cf530ee4e",
+			"branch": "master",
+			"path": "/color",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/labstack/gommon/log",
 			"repository": "https://github.com/labstack/gommon",
 			"revision": "f4ba73f8bcf88df1524069c117f7878cf530ee4e",
 			"branch": "master",
 			"path": "/log"
+		},
+		{
+			"importpath": "github.com/mattn/go-colorable",
+			"repository": "https://github.com/mattn/go-colorable",
+			"revision": "9cbef7c35391cca05f15f8181dc0b18bc9736dbb",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/mattn/go-isatty",
+			"repository": "https://github.com/mattn/go-isatty",
+			"revision": "56b76bdf51f7708750eac80fa38b952bb9f32639",
+			"branch": "master",
+			"notests": true
 		},
 		{
 			"importpath": "github.com/pmezard/go-difflib/difflib",
@@ -59,10 +95,32 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "golang.org/x/net/context",
+			"repository": "https://go.googlesource.com/net",
+			"revision": "1dd0d85fc0634d2dbe7f7d06d176c2ff548e6332",
+			"branch": "master",
+			"path": "/context",
+			"notests": true
+		},
+		{
+			"importpath": "gopkg.in/airbrake/gobrake.v2",
+			"repository": "https://gopkg.in/airbrake/gobrake.v2",
+			"revision": "ffa39d09712dfb3d20dc9b5564bb62cf6d8125d0",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "gopkg.in/bsm/ratelimit.v1",
 			"repository": "https://gopkg.in/bsm/ratelimit.v1",
 			"revision": "db14e161995a5177acef654cb0dd785e8ee8bc22",
 			"branch": "v1",
+			"notests": true
+		},
+		{
+			"importpath": "gopkg.in/gemnasium/logrus-airbrake-hook.v2",
+			"repository": "https://gopkg.in/gemnasium/logrus-airbrake-hook.v2",
+			"revision": "31e6fd4bd5a98d8ee7673d24bc54ec73c31810dd",
+			"branch": "master",
 			"notests": true
 		},
 		{
