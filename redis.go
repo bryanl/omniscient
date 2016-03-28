@@ -15,6 +15,7 @@ type RedisClient interface {
 	LPush(key string, values ...string) (int64, error)
 	LRange(key string, start, stop int64) ([]string, error)
 	LRem(key string, count int64, value interface{}) (int64, error)
+	Ping() (string, error)
 	Set(key string, value interface{}, expiration time.Duration) (string, error)
 }
 
@@ -69,6 +70,11 @@ func (rc *redisClient) LRange(key string, start, stop int64) ([]string, error) {
 
 func (rc *redisClient) LRem(key string, count int64, value interface{}) (int64, error) {
 	cmd := rc.client.LRem(key, count, value)
+	return cmd.Result()
+}
+
+func (rc *redisClient) Ping() (string, error) {
+	cmd := rc.client.Ping()
 	return cmd.Result()
 }
 

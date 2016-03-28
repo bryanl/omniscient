@@ -126,6 +126,25 @@ func (_m *MockRedisClient) LRem(key string, count int64, value interface{}) (int
 
 	return r0, r1
 }
+func (_m *MockRedisClient) Ping() (string, error) {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
 func (_m *MockRedisClient) Set(key string, value interface{}, expiration time.Duration) (string, error) {
 	ret := _m.Called(key, value, expiration)
 

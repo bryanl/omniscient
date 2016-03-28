@@ -3,6 +3,7 @@ package omniscient
 import (
 	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,12 +12,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type appTestFn func(u *url.URL, mnr *MockNoteRepository)
+type appTestFn func(u *url.URL, mnr *MockNoteRepository, h *Health)
 
-func withApp(t *testing.T, fn appTestFn) {
+func withApp(t *testing.T, healthOpts []HealthOption, fn appTestFn) {
+	health, err := NewHealth(healthOpts...)
+	assert.NoError(t, err)
+
 	mnr := &MockNoteRepository{}
 
-	app, err := NewApp(AppNoteRepository(mnr))
+	app, err := NewApp(
+		AppNoteRepository(mnr),
+		AppHealth(health))
 	assert.NoError(t, err)
 
 	ts := httptest.NewServer(app.Mux)
@@ -25,12 +31,17 @@ func withApp(t *testing.T, fn appTestFn) {
 	u, err := url.Parse(ts.URL)
 	assert.NoError(t, err)
 
-	fn(u, mnr)
+	fn(u, mnr, app.health)
 
+	app.health.mu.Lock()
+	err = app.health.Stop()
+	app.health.mu.Unlock()
+
+	assert.NoError(t, err)
 }
 
 func TestAppCreate(t *testing.T) {
-	withApp(t, func(u *url.URL, mnr *MockNoteRepository) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
 		newNote := &Note{
 			ID: "1",
 		}
@@ -57,7 +68,7 @@ func TestAppCreate(t *testing.T) {
 }
 
 func TestAppRetrieveSingleNote(t *testing.T) {
-	withApp(t, func(u *url.URL, mnr *MockNoteRepository) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
 		existingNote := &Note{
 			ID: "1",
 		}
@@ -79,7 +90,7 @@ func TestAppRetrieveSingleNote(t *testing.T) {
 }
 
 func TestAppRetrieveAllNotes(t *testing.T) {
-	withApp(t, func(u *url.URL, mnr *MockNoteRepository) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
 		existingNote := Note{
 			ID: "1",
 		}
@@ -101,7 +112,7 @@ func TestAppRetrieveAllNotes(t *testing.T) {
 }
 
 func TestAppUpdateNote(t *testing.T) {
-	withApp(t, func(u *url.URL, mnr *MockNoteRepository) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
 		existingNote := &Note{
 			ID:      "1",
 			Content: "new content",
@@ -133,7 +144,7 @@ func TestAppUpdateNote(t *testing.T) {
 }
 
 func TestAppDeleteNote(t *testing.T) {
-	withApp(t, func(u *url.URL, mnr *MockNoteRepository) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
 		mnr.On("Delete", "1").Return(nil)
 
 		u.Path = "/notes/1"
@@ -144,5 +155,20 @@ func TestAppDeleteNote(t *testing.T) {
 		res, err := http.DefaultClient.Do(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusNoContent, res.StatusCode)
+	})
+}
+
+func TestAppHealthCheck(t *testing.T) {
+	withApp(t, nil, func(u *url.URL, mnr *MockNoteRepository, h *Health) {
+		u.Path = "/healthz"
+
+		res, err := http.Get(u.String())
+		assert.NoError(t, err)
+
+		defer res.Body.Close()
+		body, err := ioutil.ReadAll(res.Body)
+
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+		assert.Equal(t, "OK", string(body))
 	})
 }

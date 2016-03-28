@@ -1,6 +1,7 @@
 package omniscient
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 
 var (
 	defaultNoteRepository NoteRepository
+	defaultHealth         *Health
 )
 
 func init() {
@@ -18,12 +20,20 @@ func init() {
 	}
 
 	defaultNoteRepository = dnr
+
+	health, err := NewHealth()
+	if err != nil {
+		panic(fmt.Sprintf("unable to create default health check service: %v", err))
+	}
+
+	defaultHealth = health
 }
 
 // App is the application.
 type App struct {
 	Mux      *echo.Echo
 	noteRepo NoteRepository
+	health   *Health
 }
 
 // AppOption is an option for configuring App.
@@ -35,6 +45,7 @@ func NewApp(opts ...AppOption) (*App, error) {
 	a := &App{
 		Mux:      e,
 		noteRepo: defaultNoteRepository,
+		health:   defaultHealth,
 	}
 
 	for _, opt := range opts {
@@ -50,6 +61,17 @@ func NewApp(opts ...AppOption) (*App, error) {
 	e.Put("/notes/:id", a.updateNote())
 	e.Delete("/notes/:id", a.deleteNote())
 
+	e.Get("/healthz", a.healthz())
+
+	if a.health == nil {
+		return nil, errors.New("no health checker")
+	}
+
+	err := a.health.Start()
+	if err != nil {
+		return nil, fmt.Errorf("unable to start health checker: %v", err)
+	}
+
 	return a, nil
 }
 
@@ -57,6 +79,14 @@ func NewApp(opts ...AppOption) (*App, error) {
 func AppNoteRepository(nr NoteRepository) AppOption {
 	return func(a *App) error {
 		a.noteRepo = nr
+		return nil
+	}
+}
+
+// AppHealth sets the app health checker option.
+func AppHealth(h *Health) AppOption {
+	return func(a *App) error {
+		a.health = h
 		return nil
 	}
 }
@@ -151,5 +181,15 @@ func (a *App) deleteNote() echo.HandlerFunc {
 		}
 
 		return c.NoContent(http.StatusNoContent)
+	}
+}
+
+func (a *App) healthz() echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		if a.health.IsOK() {
+			return c.String(http.StatusOK, "OK")
+		}
+
+		return c.NoContent(http.StatusInternalServerError)
 	}
 }
