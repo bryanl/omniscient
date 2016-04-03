@@ -1,1 +1,5 @@
 .cover
+vendor/pkg
+pkg
+.vscode
+bin
