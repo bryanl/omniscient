@@ -9,6 +9,7 @@ import (
 	"gopkg.in/labstack/echo.v1/middleware"
 
 	el "github.com/deoxxa/echo-logrus"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -60,8 +61,13 @@ func NewApp(opts ...AppOption) (*App, error) {
 		}
 	}
 
+	if err := initMetrics(); err != nil {
+		return nil, err
+	}
+
 	// middleware
 	e.Use(el.New())
+	e.Use(HitCounter())
 	e.Use(middleware.Recover())
 
 	// routes
@@ -73,6 +79,8 @@ func NewApp(opts ...AppOption) (*App, error) {
 
 	e.Get("/healthz", a.healthz())
 	e.Get("/app/info", a.appInfo())
+
+	e.Get("/metrics", prometheus.Handler())
 
 	if a.health == nil {
 		return nil, errors.New("no health checker")
