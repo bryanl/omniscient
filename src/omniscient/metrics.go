@@ -1,6 +1,7 @@
 package omniscient
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,14 +14,20 @@ var hitCounter = prometheus.NewCounter(prometheus.CounterOpts{
 })
 
 var requestHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
-	Name:    "omniscient_request_duration",
+	Name:    "omniscient_request_duration_hist",
 	Help:    "Request duration.",
 	Buckets: prometheus.LinearBuckets(20, 5, 5),
+})
+
+var requestSummary = prometheus.NewSummary(prometheus.SummaryOpts{
+	Name: "omniscient_request_duration_sum",
+	Help: "Request duration.",
 })
 
 var metricsCollectors = []prometheus.Collector{
 	hitCounter,
 	requestHistogram,
+	requestSummary,
 }
 
 func initMetrics() error {
@@ -42,12 +49,14 @@ func HitCounter() echo.MiddlewareFunc {
 				c.Error(err)
 			}
 
-			before := time.Now()
+			start := time.Now()
 			hitCounter.Inc()
-			now := time.Now()
-			dur := now.Sub(before)
 
-			requestHistogram.Observe(float64(dur))
+			dur := time.Since(start)
+			fmt.Println("dur", dur.Seconds())
+
+			requestHistogram.Observe(dur.Seconds())
+			requestSummary.Observe(dur.Seconds())
 
 			return nil
 		}
