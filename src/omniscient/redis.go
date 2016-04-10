@@ -54,7 +54,7 @@ func NewRedisClient(addr string) (RedisClient, error) {
 		}
 
 		attempt++
-		log.Println("redis didn't respond. backing off.")
+		log.Printf("backing off because redis didn't respond to ping: %s", err)
 
 	}
 	_, err := client.Ping().Result()
