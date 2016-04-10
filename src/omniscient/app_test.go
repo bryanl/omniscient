@@ -9,12 +9,17 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 )
 
 type appTestFn func(u *url.URL, mnr *MockNoteRepository, h *Health)
 
 func withApp(t *testing.T, healthOpts []HealthOption, fn appTestFn) {
+	for _, c := range metricsCollectors {
+		prometheus.Unregister(c)
+	}
+
 	health, err := NewHealth(healthOpts...)
 	assert.NoError(t, err)
 
