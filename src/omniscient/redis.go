@@ -2,7 +2,10 @@ package omniscient
 
 import (
 	"fmt"
+	"log"
 	"time"
+
+	"backoff"
 
 	"gopkg.in/redis.v3"
 )
@@ -25,14 +28,35 @@ type redisClient struct {
 
 var _ RedisClient = (*redisClient)(nil)
 
-// NewRedisClient creates an instance of RedisClient.
+// NewRedisClient creates an instance of RedisClient. It will attempt multiple times
+// using a backoff policy.
 func NewRedisClient(addr string) (RedisClient, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: "",
-		DB:       0,
-	})
+	var client *redis.Client
+	var attempt int
 
+	for {
+		sleepTime, err := backoff.DefaultPolicy.Duration(attempt)
+		if err != nil {
+			return nil, err
+		}
+
+		time.Sleep(sleepTime)
+
+		client = redis.NewClient(&redis.Options{
+			Addr:     addr,
+			Password: "",
+			DB:       0,
+		})
+
+		_, err = client.Ping().Result()
+		if err == nil {
+			break
+		}
+
+		attempt++
+		log.Println("redis didn't respond. backing off.")
+
+	}
 	_, err := client.Ping().Result()
 	if err != nil {
 		return nil, fmt.Errorf("unable to ping redis server: %v", err)
