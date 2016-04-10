@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+go get github.com/constabulary/gb/...
+PATH=$GOPATH/bin:$PATH
+gb test
