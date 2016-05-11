@@ -1,0 +1,37 @@
+---
+version: '2'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8080"
+    environment:
+      - OMNISCIENT_REDIS_ADDR=redis:6379
+      - OMNISCIENT_HTTP_ADDR=:8080
+    depends_on:
+      - redis
+    networks:
+      workshop:
+        aliases:
+          - app
+
+  redis:
+    image: redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      workshop:
+        aliases:
+          - redis
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  workshop:
+    driver: bridge
