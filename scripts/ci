@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+export GOPATH=$(pwd)/gopath
+rm -rf $GOPATH && mkdir $GOPATH
+
 go get github.com/constabulary/gb/...
 PATH=$GOPATH/bin:$PATH
 gb test
