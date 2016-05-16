@@ -42,7 +42,7 @@ func NewRedisClient(addr string) (RedisClient, error) {
 
 		time.Sleep(sleepTime)
 
-		log.Printf("conncting to redis server %s", addr)
+		log.Printf("connecting to redis server %s", addr)
 		client = redis.NewClient(&redis.Options{
 			Addr:     addr,
 			Password: "",
