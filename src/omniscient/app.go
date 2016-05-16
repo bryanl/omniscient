@@ -75,7 +75,7 @@ func NewApp(opts ...AppOption) (*App, error) {
 	e.Get("/notes", a.retrieveNotes())
 	e.Get("/notes/:id", a.retrieveNote())
 	e.Put("/notes/:id", a.updateNote())
-	e.Delete("/notes/:id", a.deleteNote())
+	// e.Delete("/notes/:id", a.deleteNote())
 
 	e.Get("/healthz", a.healthz())
 	e.Get("/app/info", a.appInfo())
@@ -187,21 +187,21 @@ func (a *App) updateNote() echo.HandlerFunc {
 	}
 }
 
-func (a *App) deleteNote() echo.HandlerFunc {
-	return func(c *echo.Context) error {
-		id := c.Param("id")
+// func (a *App) deleteNote() echo.HandlerFunc {
+// 	return func(c *echo.Context) error {
+// 		id := c.Param("id")
 
-		err := a.noteRepo.Delete(id)
-		if err != nil {
-			msg := map[string]interface{}{
-				"error": "unable to delete note",
-			}
-			return c.JSON(http.StatusBadRequest, msg)
-		}
+// 		err := a.noteRepo.Delete(id)
+// 		if err != nil {
+// 			msg := map[string]interface{}{
+// 				"error": "unable to delete note",
+// 			}
+// 			return c.JSON(http.StatusBadRequest, msg)
+// 		}
 
-		return c.NoContent(http.StatusNoContent)
-	}
-}
+// 		return c.NoContent(http.StatusNoContent)
+// 	}
+// }
 
 func (a *App) healthz() echo.HandlerFunc {
 	return func(c *echo.Context) error {
