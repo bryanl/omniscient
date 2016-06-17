@@ -107,6 +107,7 @@ func NewApp(opts ...AppOption) (*App, error) {
 	e.Get("/app/info", a.appInfo())
 
 	e.Get("/slow", a.slowResp())
+	e.Get("/fail", a.failResp())
 
 	e.Get("/metrics", standard.WrapHandler(prometheus.Handler()))
 
@@ -245,6 +246,12 @@ func (a *App) slowResp() echo.HandlerFunc {
 	return func(c echo.Context) error {
 		time.Sleep(1500 * time.Millisecond)
 		return c.String(http.StatusOK, "OK")
+	}
+}
+
+func (a *App) failResp() echo.HandlerFunc {
+	return func(c echo.Context) error {
+		panic("something went wrong")
 	}
 }
 
