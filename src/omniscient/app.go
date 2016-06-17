@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/getsentry/raven-go"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/engine"
 	"github.com/labstack/echo/engine/standard"
-	"github.com/labstack/echo/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/satori/go.uuid"
 )
@@ -92,9 +92,9 @@ func NewApp(opts ...AppOption) (*App, error) {
 	logmw := echologger.NewWithNameAndLogger("omniscient", log)
 	e.Use(logmw)
 
-	e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
-		StackSize: 1 << 10, // 1 KB
-	}))
+	// e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
+	// 	StackSize: 1 << 10, // 1 KB
+	// }))
 
 	// routes
 	e.Post("/notes", a.createNote())
@@ -251,7 +251,11 @@ func (a *App) slowResp() echo.HandlerFunc {
 
 func (a *App) failResp() echo.HandlerFunc {
 	return func(c echo.Context) error {
-		panic("something went wrong")
+		raven.CapturePanic(func() {
+			panic("something went wrong")
+		}, nil)
+
+		return c.String(http.StatusInternalServerError, "ERROR")
 	}
 }
 

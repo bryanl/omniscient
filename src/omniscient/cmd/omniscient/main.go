@@ -2,11 +2,12 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 
 	"omniscient"
 
+	log "github.com/Sirupsen/logrus"
+	"github.com/getsentry/raven-go"
 	"github.com/kouhin/envflag"
 )
 
@@ -14,8 +15,14 @@ func main() {
 	var (
 		redisAddr = flag.String("omniscient-redis-addr", "localhost:6379", "redis address")
 		httpAddr  = flag.String("omniscient-http-addr", ":8080", "http server address")
+		sentryURL = flag.String("omniscient-sentry-url", "", "sentry url")
 	)
 	envflag.Parse()
+
+	if len(*sentryURL) > 0 {
+		log.Info("configuring sentry")
+		raven.SetDSN(*sentryURL)
+	}
 
 	rc, err := omniscient.NewRedisClient(*redisAddr)
 	if err != nil {

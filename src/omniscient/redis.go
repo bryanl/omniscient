@@ -2,8 +2,9 @@ package omniscient
 
 import (
 	"fmt"
-	"log"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
 
 	"backoff"
 
@@ -42,7 +43,7 @@ func NewRedisClient(addr string) (RedisClient, error) {
 
 		time.Sleep(sleepTime)
 
-		log.Printf("conncting to redis server %s", addr)
+		log.WithField("addr", addr).Info("connecting to redis server")
 		client = redis.NewClient(&redis.Options{
 			Addr:     addr,
 			Password: "",
@@ -55,13 +56,15 @@ func NewRedisClient(addr string) (RedisClient, error) {
 		}
 
 		attempt++
-		log.Printf("backing off because redis didn't respond to ping: %s", err)
+		log.WithError(err).Warning("backing off because redis didn't respond to ping")
 
 	}
 	_, err := client.Ping().Result()
 	if err != nil {
 		return nil, fmt.Errorf("unable to ping redis server: %v", err)
 	}
+
+	log.Info("connected to redis")
 
 	return &redisClient{
 		client: client,

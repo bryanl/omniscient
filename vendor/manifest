@@ -28,6 +28,12 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/getsentry/raven-go",
+			"repository": "https://github.com/getsentry/raven-go",
+			"revision": "dffeb57df75d6a911f00232155194e43d79d38d7",
+			"branch": "master"
+		},
+		{
 			"importpath": "github.com/golang/protobuf/proto",
 			"repository": "https://github.com/golang/protobuf",
 			"revision": "0c1f6d65b5a189c2250d10e71a5506f06f9fa0a0",
