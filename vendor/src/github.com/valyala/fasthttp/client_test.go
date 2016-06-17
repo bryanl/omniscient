@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -602,7 +603,7 @@ func TestClientHTTPSConcurrent(t *testing.T) {
 	defer sHTTPS.Stop()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		addr := "http://" + addrHTTP
 		if i&1 != 0 {
@@ -610,7 +611,7 @@ func TestClientHTTPSConcurrent(t *testing.T) {
 		}
 		go func() {
 			defer wg.Done()
-			testClientGet(t, &defaultClient, addr, 30)
+			testClientGet(t, &defaultClient, addr, 20)
 			testClientPost(t, &defaultClient, addr, 10)
 		}()
 	}
@@ -627,13 +628,13 @@ func TestClientManyServers(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		addr := "http://" + addrs[i]
 		go func() {
 			defer wg.Done()
-			testClientGet(t, &defaultClient, addr, 300)
-			testClientPost(t, &defaultClient, addr, 100)
+			testClientGet(t, &defaultClient, addr, 20)
+			testClientPost(t, &defaultClient, addr, 10)
 		}()
 	}
 	wg.Wait()
@@ -675,8 +676,19 @@ func TestClientConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
+func skipIfNotUnix(tb testing.TB) {
+	switch runtime.GOOS {
+	case "android", "nacl", "plan9", "windows":
+		tb.Skipf("%s does not support unix sockets", runtime.GOOS)
+	}
+	if runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64") {
+		tb.Skip("iOS does not support unix, unixgram")
+	}
+}
+
 func TestHostClientGet(t *testing.T) {
-	addr := "./TestHostClientGet.unix"
+	skipIfNotUnix(t)
+	addr := "TestHostClientGet.unix"
 	s := startEchoServer(t, "unix", addr)
 	defer s.Stop()
 	c := createEchoClient(t, "unix", addr)
@@ -685,6 +697,7 @@ func TestHostClientGet(t *testing.T) {
 }
 
 func TestHostClientPost(t *testing.T) {
+	skipIfNotUnix(t)
 	addr := "./TestHostClientPost.unix"
 	s := startEchoServer(t, "unix", addr)
 	defer s.Stop()
@@ -694,6 +707,7 @@ func TestHostClientPost(t *testing.T) {
 }
 
 func TestHostClientConcurrent(t *testing.T) {
+	skipIfNotUnix(t)
 	addr := "./TestHostClientConcurrent.unix"
 	s := startEchoServer(t, "unix", addr)
 	defer s.Stop()

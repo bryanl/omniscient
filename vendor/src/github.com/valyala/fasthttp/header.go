@@ -116,6 +116,9 @@ func (h *RequestHeader) SetByteRange(startPos, endPos int) {
 
 // StatusCode returns response status code.
 func (h *ResponseHeader) StatusCode() int {
+	if h.statusCode == 0 {
+		return StatusOK
+	}
 	return h.statusCode
 }
 
@@ -516,6 +519,11 @@ func (h *RequestHeader) IsHead() bool {
 		return false
 	}
 	return bytes.Equal(h.Method(), strHead)
+}
+
+// IsDelete returns true if request method is DELETE.
+func (h *RequestHeader) IsDelete() bool {
+	return bytes.Equal(h.Method(), strDelete)
 }
 
 // IsHTTP11 returns true if the request is HTTP/1.1.
@@ -929,21 +937,79 @@ func (h *ResponseHeader) SetCookie(cookie *Cookie) {
 
 // SetCookie sets 'key: value' cookies.
 func (h *RequestHeader) SetCookie(key, value string) {
-	h.bufKV.key = append(h.bufKV.key[:0], key...)
-	h.SetCookieBytesK(h.bufKV.key, value)
+	h.parseRawHeaders()
+	h.collectCookies()
+	h.cookies = setArg(h.cookies, key, value)
 }
 
 // SetCookieBytesK sets 'key: value' cookies.
 func (h *RequestHeader) SetCookieBytesK(key []byte, value string) {
-	h.bufKV.value = append(h.bufKV.value[:0], value...)
-	h.SetCookieBytesKV(key, h.bufKV.value)
+	h.SetCookie(b2s(key), value)
 }
 
 // SetCookieBytesKV sets 'key: value' cookies.
 func (h *RequestHeader) SetCookieBytesKV(key, value []byte) {
+	h.SetCookie(b2s(key), b2s(value))
+}
+
+// DelClientCookie instructs the client to remove the given cookie.
+//
+// Use DelCookie if you want just removing the cookie from response header.
+func (h *ResponseHeader) DelClientCookie(key string) {
+	h.DelCookie(key)
+
+	c := AcquireCookie()
+	c.SetKey(key)
+	c.SetExpire(CookieExpireDelete)
+	h.SetCookie(c)
+	ReleaseCookie(c)
+}
+
+// DelClientCookieBytes instructs the client to remove the given cookie.
+//
+// Use DelCookieBytes if you want just removing the cookie from response header.
+func (h *ResponseHeader) DelClientCookieBytes(key []byte) {
+	h.DelClientCookie(b2s(key))
+}
+
+// DelCookie removes cookie under the given key from response header.
+//
+// Note that DelCookie doesn't remove the cookie from the client.
+// Use DelClientCookie instead.
+func (h *ResponseHeader) DelCookie(key string) {
+	h.cookies = delAllArgs(h.cookies, key)
+}
+
+// DelCookieBytes removes cookie under the given key from response header.
+//
+// Note that DelCookieBytes doesn't remove the cookie from the client.
+// Use DelClientCookieBytes instead.
+func (h *ResponseHeader) DelCookieBytes(key []byte) {
+	h.DelCookie(b2s(key))
+}
+
+// DelCookie removes cookie under the given key.
+func (h *RequestHeader) DelCookie(key string) {
 	h.parseRawHeaders()
 	h.collectCookies()
-	h.cookies = setArgBytes(h.cookies, key, value)
+	h.cookies = delAllArgs(h.cookies, key)
+}
+
+// DelCookieBytes removes cookie under the given key.
+func (h *RequestHeader) DelCookieBytes(key []byte) {
+	h.DelCookie(b2s(key))
+}
+
+// DelAllCookies removes all the cookies from response headers.
+func (h *ResponseHeader) DelAllCookies() {
+	h.cookies = h.cookies[:0]
+}
+
+// DelAllCookies removes all the cookies from request headers.
+func (h *RequestHeader) DelAllCookies() {
+	h.parseRawHeaders()
+	h.collectCookies()
+	h.cookies = h.cookies[:0]
 }
 
 // Add adds the given 'key: value' header.
@@ -1321,9 +1387,6 @@ func (h *ResponseHeader) String() string {
 func (h *ResponseHeader) AppendBytes(dst []byte) []byte {
 	statusCode := h.StatusCode()
 	if statusCode < 0 {
-		statusCode = StatusOK
-	}
-	if statusCode == 0 {
 		statusCode = StatusOK
 	}
 	dst = append(dst, statusLine(statusCode)...)

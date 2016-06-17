@@ -1,19 +1,21 @@
 [![Build Status](https://travis-ci.org/valyala/fasthttp.svg)](https://travis-ci.org/valyala/fasthttp)
 [![GoDoc](https://godoc.org/github.com/valyala/fasthttp?status.svg)](http://godoc.org/github.com/valyala/fasthttp)
-[![Coverage](http://gocover.io/_badge/github.com/valyala/fasthttp)](http://gocover.io/github.com/valyala/fasthttp)
 [![Go Report](http://goreportcard.com/badge/valyala/fasthttp)](http://goreportcard.com/report/valyala/fasthttp)
 
 # fasthttp
 Fast HTTP implementation for Go.
 
-Currently fasthttp is successfully used in a production serving 100K rps from 1M
-concurrent keep-alive connections on a single server.
+Currently fasthttp is successfully used by [VertaMedia](https://vertamedia.com/)
+in a production serving up to 200K rps from more than 1.5M concurrent keep-alive
+connections per physical server.
 
 [TechEmpower Benchmark round 12 results](https://www.techempower.com/benchmarks/#section=data-r12&hw=peak&test=plaintext)
 
 [Server Benchmarks](#http-server-performance-comparison-with-nethttp)
 
 [Client Benchmarks](#http-client-comparison-with-nethttp)
+
+[Install](#install)
 
 [Documentation](https://godoc.org/github.com/valyala/fasthttp)
 
@@ -26,6 +28,8 @@ concurrent keep-alive connections on a single server.
 [Fasthttp best practices](#fasthttp-best-practices)
 
 [Tricks with byte buffers](#tricks-with-byte-buffers)
+
+[Related projects](#related-projects)
 
 [FAQ](#faq)
 
@@ -151,6 +155,14 @@ BenchmarkClientGetEndToEnd100Inmemory-4                 	10000000	      1329 ns/
 BenchmarkClientGetEndToEnd1000Inmemory-4                	10000000	      1316 ns/op	       5 B/op	       0 allocs/op
 ```
 
+
+# Install
+
+```
+go get -u github.com/valyala/fasthttp
+```
+
+
 # Switching from net/http to fasthttp
 
 Unfortunately, fasthttp doesn't provide API identical to net/http.
@@ -260,8 +272,10 @@ like in net/http. The following code is valid for fasthttp:
   ```
 
 * Fasthttp doesn't provide [ServeMux](https://golang.org/pkg/net/http/#ServeMux),
-but there are more powerful third-party routers with fasthttp support exist:
+but there are more powerful third-party routers and web frameworks
+with fasthttp support exist:
 
+  * [Iris](https://github.com/kataras/iris)
   * [fasthttp-routing](https://github.com/qiangxue/fasthttp-routing)
   * [fasthttprouter](https://github.com/buaazp/fasthttprouter)
   * [echo v2](https://github.com/labstack/echo)
@@ -368,7 +382,8 @@ before returning from [RequestHandler](https://godoc.org/github.com/valyala/fast
 While fasthttp is optimized for speed, its' performance may be easily saturated
 by slow [RequestHandler](https://godoc.org/github.com/valyala/fasthttp#RequestHandler).
 So [profile](http://blog.golang.org/profiling-go-programs) and optimize your
-code after switching to fasthttp.
+code after switching to fasthttp. For instance, use [quicktemplate](https://github.com/valyala/quicktemplate)
+instead of [html/template](https://golang.org/pkg/html/template/).
 
 * See also [fasthttputil](https://godoc.org/github.com/valyala/fasthttp/fasthttputil),
 [fasthttpadaptor](https://godoc.org/github.com/valyala/fasthttp/fasthttpadaptor) and
@@ -398,8 +413,12 @@ code after switching to fasthttp.
 * Avoid conversion between `[]byte` and `string`, since this may result in memory
   allocation+copy. Fasthttp API provides functions for both `[]byte` and `string` -
   use these functions instead of converting manually between `[]byte` and `string`.
+  There are some exceptions - see [this wiki page](https://github.com/golang/go/wiki/CompilerOptimizations#string-and-byte)
+  for more details.
 * Verify your tests and production code under
   [race detector](https://golang.org/doc/articles/race_detector.html) on a regular basis.
+* Prefer [quicktemplate](https://github.com/valyala/quicktemplate) instead of
+  [html/template](https://golang.org/pkg/html/template/) in your webserver.
 
 
 # Tricks with `[]byte` buffers
@@ -456,6 +475,22 @@ b := a[:100]  // is valid, since cap(a) == 100.
 statusCode, body, err := fasthttp.Get(nil, "http://google.com/")
 uintBuf := fasthttp.AppendUint(nil, 1234)
 ```
+
+# Related projects
+
+  * [fasthttp-contrib](https://github.com/fasthttp-contrib) - various useful
+    helpers for projects based on fasthttp.
+  * [iris](https://github.com/kataras/iris) - web application framework built
+    on top of fasthttp. Features speed and functionality.
+  * [fasthttp-routing](https://github.com/qiangxue/fasthttp-routing) - fast and
+    powerful routing package for fasthttp servers.
+  * [fasthttprouter](https://github.com/buaazp/fasthttprouter) - a high
+    performance fasthttp request router that scales well.
+  * [echo](https://github.com/labstack/echo) - fast and unfancy HTTP server
+    framework with fasthttp support.
+  * [websocket](https://github.com/leavengood/websocket) - Gorilla-based
+    websocket implementation for fasthttp.
+
 
 # FAQ
 
@@ -518,8 +553,9 @@ uintBuf := fasthttp.AppendUint(nil, 1234)
 * *Are there plans to add request routing to fasthttp?*
 
   There are no plans to add request routing into fasthttp.
-  Use third-party routers with fasthttp support:
+  Use third-party routers and web frameworks with fasthttp support:
 
+    * [Iris](https://github.com/kataras/iris)
     * [fasthttp-routing](https://github.com/qiangxue/fasthttp-routing)
     * [fasthttprouter](https://github.com/buaazp/fasthttprouter)
     * [echo v2](https://github.com/labstack/echo)

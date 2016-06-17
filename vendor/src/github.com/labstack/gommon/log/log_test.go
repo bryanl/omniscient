@@ -33,10 +33,10 @@ func test(l *Logger, t *testing.T) {
 	assert.NotContains(t, b.String(), "debugf")
 	assert.NotContains(t, b.String(), "info")
 	assert.NotContains(t, b.String(), "infof")
-	assert.Contains(t, b.String(), "level=WARN, prefix="+l.prefix)
-	assert.Contains(t, b.String(), "level=WARN, prefix="+l.prefix)
-	assert.Contains(t, b.String(), "level=ERROR, prefix="+l.prefix)
-	assert.Contains(t, b.String(), "level=ERROR, prefix="+l.prefix)
+	assert.Contains(t, b.String(), `"level":"WARN","prefix":"`+l.prefix+`"`)
+	assert.Contains(t, b.String(), `"message":"warn"`)
+	assert.Contains(t, b.String(), `"level":"ERROR","prefix":"`+l.prefix+`"`)
+	assert.Contains(t, b.String(), `"message":"errorf"`)
 }
 
 func TestLog(t *testing.T) {
@@ -89,13 +89,25 @@ func loggerFatalTest(t *testing.T, env string, contains string) {
 	t.Fatalf("process ran with err %v, want exit status 1", err)
 }
 
+func TestNoFormat(t *testing.T) {
+}
+
 func TestFormat(t *testing.T) {
 	l := New("test")
-	l.SetFormat("${level} | ${message}")
+	l.SetHeader("${level} | ${prefix}")
 	b := new(bytes.Buffer)
 	l.SetOutput(b)
-	l.Info("test")
-	assert.Equal(t, "INFO | test", b.String())
+	l.Info("info")
+	assert.Equal(t, "INFO | test info\n", b.String())
+}
+
+func TestJSON(t *testing.T) {
+	l := New("test")
+	b := new(bytes.Buffer)
+	l.SetOutput(b)
+	l.SetLevel(DEBUG)
+	l.Debugj(JSON{"name": "value"})
+	assert.Contains(t, b.String(), `"name":"value"`)
 }
 
 func BenchmarkLog(b *testing.B) {

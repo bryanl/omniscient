@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -543,9 +542,13 @@ type HostClient struct {
 }
 
 type clientConn struct {
-	c           net.Conn
+	c net.Conn
+
 	createdTime time.Time
 	lastUseTime time.Time
+
+	lastReadDeadlineTime  time.Time
+	lastWriteDeadlineTime time.Time
 }
 
 var startTimeUnix = time.Now().Unix()
@@ -661,16 +664,7 @@ func clientGetURLDeadlineFreeConn(dst []byte, url string, deadline time.Time, c 
 		}
 	}()
 
-	var tc *time.Timer
-	tcv := timerPool.Get()
-	if tcv == nil {
-		tc = time.NewTimer(timeout)
-		tcv = tc
-	} else {
-		tc = tcv.(*time.Timer)
-		initTimer(tc, timeout)
-	}
-
+	tc := acquireTimer(timeout)
 	select {
 	case resp := <-ch:
 		ReleaseRequest(req)
@@ -682,9 +676,7 @@ func clientGetURLDeadlineFreeConn(dst []byte, url string, deadline time.Time, c 
 		body = dst
 		err = ErrTimeout
 	}
-
-	stopTimer(tc)
-	timerPool.Put(tcv)
+	releaseTimer(tc)
 
 	return statusCode, body, err
 }
@@ -714,8 +706,10 @@ const maxRedirectsCount = 16
 
 func doRequestFollowRedirects(req *Request, dst []byte, url string, c clientDoer) (statusCode int, body []byte, err error) {
 	resp := AcquireResponse()
-	oldBody := resp.body
-	resp.body = dst
+	bodyBuf := resp.bodyBuffer()
+	resp.keepBodyBuffer = true
+	oldBody := bodyBuf.B
+	bodyBuf.B = dst
 
 	redirectsCount := 0
 	for {
@@ -744,8 +738,9 @@ func doRequestFollowRedirects(req *Request, dst []byte, url string, c clientDoer
 		url = getRedirectURL(url, location)
 	}
 
-	body = resp.body
-	resp.body = oldBody
+	body = bodyBuf.B
+	bodyBuf.B = oldBody
+	resp.keepBodyBuffer = false
 	ReleaseResponse(resp)
 
 	return statusCode, body, err
@@ -860,10 +855,13 @@ func clientDoDeadline(req *Request, resp *Response, deadline time.Time, c client
 	}
 }
 
+var sleepJitter uint64
+
 func updateSleepTime(prevTime time.Duration, deadline time.Time) time.Duration {
 	sleepTime := prevTime * 2
 	if sleepTime == 0 {
-		sleepTime = (10 + time.Duration(rand.Intn(40))) * time.Millisecond
+		jitter := atomic.AddUint64(&sleepJitter, 1) % 40
+		sleepTime = (10 + time.Duration(jitter)) * time.Millisecond
 	}
 
 	remainingTime := deadline.Sub(time.Now())
@@ -910,16 +908,7 @@ func clientDoDeadlineFreeConn(req *Request, resp *Response, deadline time.Time, 
 		ch <- c.Do(reqCopy, respCopy)
 	}()
 
-	var tc *time.Timer
-	tcv := timerPool.Get()
-	if tcv == nil {
-		tc = time.NewTimer(timeout)
-		tcv = tc
-	} else {
-		tc = tcv.(*time.Timer)
-		initTimer(tc, timeout)
-	}
-
+	tc := acquireTimer(timeout)
 	var err error
 	select {
 	case err = <-ch:
@@ -933,17 +922,12 @@ func clientDoDeadlineFreeConn(req *Request, resp *Response, deadline time.Time, 
 	case <-tc.C:
 		err = ErrTimeout
 	}
-
-	stopTimer(tc)
-	timerPool.Put(tcv)
+	releaseTimer(tc)
 
 	return err
 }
 
-var (
-	errorChPool sync.Pool
-	timerPool   sync.Pool
-)
+var errorChPool sync.Pool
 
 // Do performs the given http request and sets the corresponding response.
 //
@@ -973,11 +957,34 @@ func isIdempotent(req *Request) bool {
 }
 
 func (c *HostClient) do(req *Request, resp *Response) (bool, error) {
+	nilResp := false
+	if resp == nil {
+		nilResp = true
+		resp = AcquireResponse()
+	}
+
+	ok, err := c.doNonNilReqResp(req, resp)
+
+	if nilResp {
+		ReleaseResponse(resp)
+	}
+
+	return ok, err
+}
+
+func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error) {
 	if req == nil {
 		panic("BUG: req cannot be nil")
 	}
+	if resp == nil {
+		panic("BUG: resp cannot be nil")
+	}
 
 	atomic.StoreUint32(&c.lastUseTime, uint32(time.Now().Unix()-startTimeUnix))
+
+	// Free up resources occupied by response before sending the request,
+	// so the GC may reclaim these resources (e.g. response body).
+	resp.Reset()
 
 	cc, err := c.acquireConn()
 	if err != nil {
@@ -986,9 +993,16 @@ func (c *HostClient) do(req *Request, resp *Response) (bool, error) {
 	conn := cc.c
 
 	if c.WriteTimeout > 0 {
-		if err = conn.SetWriteDeadline(time.Now().Add(c.WriteTimeout)); err != nil {
-			c.closeConn(cc)
-			return true, err
+		// Optimization: update write deadline only if more than 25%
+		// of the last write deadline exceeded.
+		// See https://github.com/golang/go/issues/15133 for details.
+		currentTime := time.Now()
+		if currentTime.Sub(cc.lastWriteDeadlineTime) > (c.WriteTimeout >> 2) {
+			if err = conn.SetWriteDeadline(currentTime.Add(c.WriteTimeout)); err != nil {
+				c.closeConn(cc)
+				return true, err
+			}
+			cc.lastWriteDeadlineTime = currentTime
 		}
 	}
 
@@ -1022,19 +1036,17 @@ func (c *HostClient) do(req *Request, resp *Response) (bool, error) {
 	}
 	c.releaseWriter(bw)
 
-	nilResp := false
-	if resp == nil {
-		nilResp = true
-		resp = AcquireResponse()
-	}
-
 	if c.ReadTimeout > 0 {
-		if err = conn.SetReadDeadline(time.Now().Add(c.ReadTimeout)); err != nil {
-			if nilResp {
-				ReleaseResponse(resp)
+		// Optimization: update read deadline only if more than 25%
+		// of the last read deadline exceeded.
+		// See https://github.com/golang/go/issues/15133 for details.
+		currentTime := time.Now()
+		if currentTime.Sub(cc.lastReadDeadlineTime) > (c.ReadTimeout >> 2) {
+			if err = conn.SetReadDeadline(currentTime.Add(c.ReadTimeout)); err != nil {
+				c.closeConn(cc)
+				return true, err
 			}
-			c.closeConn(cc)
-			return true, err
+			cc.lastReadDeadlineTime = currentTime
 		}
 	}
 
@@ -1047,9 +1059,6 @@ func (c *HostClient) do(req *Request, resp *Response) (bool, error) {
 
 	br := c.acquireReader(conn)
 	if err = resp.ReadLimitBody(br, c.MaxResponseBodySize); err != nil {
-		if nilResp {
-			ReleaseResponse(resp)
-		}
 		c.releaseReader(br)
 		c.closeConn(cc)
 		if err == io.EOF {
@@ -1065,9 +1074,6 @@ func (c *HostClient) do(req *Request, resp *Response) (bool, error) {
 		c.releaseConn(cc)
 	}
 
-	if nilResp {
-		ReleaseResponse(resp)
-	}
 	return false, err
 }
 
@@ -1670,6 +1676,7 @@ func (c *PipelineClient) writer(conn net.Conn, stopCh <-chan struct{}) error {
 	defer bw.Flush()
 	chR := c.chR
 	chW := c.chW
+	writeTimeout := c.WriteTimeout
 
 	maxIdleConnDuration := c.MaxIdleConnDuration
 	if maxIdleConnDuration <= 0 {
@@ -1685,6 +1692,8 @@ func (c *PipelineClient) writer(conn net.Conn, stopCh <-chan struct{}) error {
 
 		w   *pipelineWork
 		err error
+
+		lastWriteDeadlineTime time.Time
 	)
 	close(instantTimerCh)
 	for {
@@ -1716,11 +1725,18 @@ func (c *PipelineClient) writer(conn net.Conn, stopCh <-chan struct{}) error {
 			continue
 		}
 
-		if c.WriteTimeout > 0 {
-			if err = conn.SetWriteDeadline(time.Now().Add(c.WriteTimeout)); err != nil {
-				w.err = err
-				w.done <- struct{}{}
-				return err
+		if writeTimeout > 0 {
+			// Optimization: update write deadline only if more than 25%
+			// of the last write deadline exceeded.
+			// See https://github.com/golang/go/issues/15133 for details.
+			currentTime := time.Now()
+			if currentTime.Sub(lastWriteDeadlineTime) > (writeTimeout >> 2) {
+				if err = conn.SetWriteDeadline(currentTime.Add(writeTimeout)); err != nil {
+					w.err = err
+					w.done <- struct{}{}
+					return err
+				}
+				lastWriteDeadlineTime = currentTime
 			}
 		}
 		if err = w.req.Write(bw); err != nil {
@@ -1769,10 +1785,13 @@ func (c *PipelineClient) reader(conn net.Conn, stopCh <-chan struct{}) error {
 	}
 	br := bufio.NewReaderSize(conn, readBufferSize)
 	chR := c.chR
+	readTimeout := c.ReadTimeout
 
 	var (
 		w   *pipelineWork
 		err error
+
+		lastReadDeadlineTime time.Time
 	)
 	for {
 		select {
@@ -1787,11 +1806,18 @@ func (c *PipelineClient) reader(conn net.Conn, stopCh <-chan struct{}) error {
 			}
 		}
 
-		if c.ReadTimeout > 0 {
-			if err = conn.SetReadDeadline(time.Now().Add(c.ReadTimeout)); err != nil {
-				w.err = err
-				w.done <- struct{}{}
-				return err
+		if readTimeout > 0 {
+			// Optimization: update read deadline only if more than 25%
+			// of the last read deadline exceeded.
+			// See https://github.com/golang/go/issues/15133 for details.
+			currentTime := time.Now()
+			if currentTime.Sub(lastReadDeadlineTime) > (readTimeout >> 2) {
+				if err = conn.SetReadDeadline(currentTime.Add(readTimeout)); err != nil {
+					w.err = err
+					w.done <- struct{}{}
+					return err
+				}
+				lastReadDeadlineTime = currentTime
 			}
 		}
 		if err = w.resp.Read(br); err != nil {

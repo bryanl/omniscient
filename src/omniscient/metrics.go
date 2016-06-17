@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/labstack/echo"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/labstack/echo.v1"
 )
 
 var hitCounter = prometheus.NewCounter(prometheus.CounterOpts{
@@ -44,7 +44,7 @@ func initMetrics() error {
 // HitCounter tracks hits.
 func HitCounter() echo.MiddlewareFunc {
 	return func(h echo.HandlerFunc) echo.HandlerFunc {
-		return func(c *echo.Context) error {
+		return func(c echo.Context) error {
 			if err := h(c); err != nil {
 				c.Error(err)
 			}

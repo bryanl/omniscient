@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"reflect"
 	"sync"
 	"time"
 	"unsafe"
@@ -60,8 +61,13 @@ func AppendIPv4(dst []byte, ip net.IP) []byte {
 	return dst
 }
 
+var errEmptyIPStr = errors.New("empty ip address string")
+
 // ParseIPv4 parses ip address from ipStr into dst and returns the extended dst.
 func ParseIPv4(dst net.IP, ipStr []byte) (net.IP, error) {
+	if len(ipStr) == 0 {
+		return dst, errEmptyIPStr
+	}
 	if len(dst) < net.IPv4len {
 		dst = make([]byte, net.IPv4len)
 	}
@@ -353,6 +359,20 @@ func lowercaseBytes(b []byte) {
 // in the future go versions.
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
+}
+
+// s2b converts string to a byte slice without memory allocation.
+//
+// Note it may break if string and/or slice header will change
+// in the future go versions.
+func s2b(s string) []byte {
+	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	bh := reflect.SliceHeader{
+		Data: sh.Data,
+		Len:  sh.Len,
+		Cap:  sh.Len,
+	}
+	return *(*[]byte)(unsafe.Pointer(&bh))
 }
 
 // AppendQuotedArg appends url-encoded src to dst and returns appended dst.

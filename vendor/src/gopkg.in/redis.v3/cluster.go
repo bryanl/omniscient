@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gopkg.in/redis.v3/internal"
 	"gopkg.in/redis.v3/internal/hashtag"
 	"gopkg.in/redis.v3/internal/pool"
 )
@@ -195,12 +196,12 @@ func (c *ClusterClient) process(cmd Cmder) {
 
 		// If there is no (real) error, we are done!
 		err := cmd.Err()
-		if err == nil || err == Nil || err == TxFailedErr {
+		if err == nil {
 			return
 		}
 
 		// On network errors try random node.
-		if isNetworkError(err) {
+		if shouldRetry(err) {
 			client, err = c.randomClient()
 			if err != nil {
 				return
@@ -269,13 +270,13 @@ func (c *ClusterClient) reloadSlots() {
 
 	client, err := c.randomClient()
 	if err != nil {
-		Logger.Printf("randomClient failed: %s", err)
+		internal.Logf("randomClient failed: %s", err)
 		return
 	}
 
 	slots, err := client.ClusterSlots().Result()
 	if err != nil {
-		Logger.Printf("ClusterSlots failed: %s", err)
+		internal.Logf("ClusterSlots failed: %s", err)
 		return
 	}
 	c.setSlots(slots)
@@ -302,14 +303,14 @@ func (c *ClusterClient) reaper(frequency time.Duration) {
 		for _, client := range c.getClients() {
 			nn, err := client.connPool.(*pool.ConnPool).ReapStaleConns()
 			if err != nil {
-				Logger.Printf("ReapStaleConns failed: %s", err)
+				internal.Logf("ReapStaleConns failed: %s", err)
 			} else {
 				n += nn
 			}
 		}
 
 		s := c.PoolStats()
-		Logger.Printf(
+		internal.Logf(
 			"reaper: removed %d stale conns (TotalConns=%d FreeConns=%d Requests=%d Hits=%d Timeouts=%d)",
 			n, s.TotalConns, s.FreeConns, s.Requests, s.Hits, s.Timeouts,
 		)
@@ -324,8 +325,9 @@ type ClusterOptions struct {
 	// A seed list of host:port addresses of cluster nodes.
 	Addrs []string
 
-	// The maximum number of MOVED/ASK redirects to follow before giving up.
-	// Default is 16
+	// The maximum number of retries before giving up. Command is retried
+	// on network errors and MOVED/ASK redirects.
+	// Default is 16.
 	MaxRedirects int
 
 	// Following options are copied from Options struct.

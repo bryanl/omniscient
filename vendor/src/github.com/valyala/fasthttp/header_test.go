@@ -10,6 +10,36 @@ import (
 	"testing"
 )
 
+func TestResponseHeaderDefaultStatusCode(t *testing.T) {
+	var h ResponseHeader
+	statusCode := h.StatusCode()
+	if statusCode != StatusOK {
+		t.Fatalf("unexpected status code: %d. Expecting %d", statusCode, StatusOK)
+	}
+}
+
+func TestResponseHeaderDelClientCookie(t *testing.T) {
+	cookieName := "foobar"
+
+	var h ResponseHeader
+	c := AcquireCookie()
+	c.SetKey(cookieName)
+	c.SetValue("aasdfsdaf")
+	h.SetCookie(c)
+
+	h.DelClientCookieBytes([]byte(cookieName))
+	if !h.Cookie(c) {
+		t.Fatalf("expecting cookie %q", c.Key())
+	}
+	if !c.Expire().Equal(CookieExpireDelete) {
+		t.Fatalf("unexpected cookie expiration time: %s. Expecting %s", c.Expire(), CookieExpireDelete)
+	}
+	if len(c.Value()) > 0 {
+		t.Fatalf("unexpected cookie value: %q. Expecting empty value", c.Value())
+	}
+	ReleaseCookie(c)
+}
+
 func TestResponseHeaderAdd(t *testing.T) {
 	m := make(map[string]struct{})
 	var h ResponseHeader
@@ -771,6 +801,9 @@ func TestRequestHeaderEmptyMethod(t *testing.T) {
 	if h.IsHead() {
 		t.Fatalf("empty method cannot be HEAD")
 	}
+	if h.IsDelete() {
+		t.Fatalf("empty method cannot be DELETE")
+	}
 }
 
 func TestResponseHeaderHTTPVer(t *testing.T) {
@@ -1117,6 +1150,8 @@ func TestResponseHeaderCookie(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
+	h.DelAllCookies()
+
 	var h1 ResponseHeader
 	br := bufio.NewReader(w)
 	if err := h1.Read(br); err != nil {
@@ -1131,12 +1166,28 @@ func TestResponseHeaderCookie(t *testing.T) {
 		t.Fatalf("unexpected cookie\n%v\nExpected\n%v\n", &c, &expectedC1)
 	}
 
+	h1.DelCookie("foobar")
+	if h.Cookie(&c) {
+		t.Fatalf("Unexpected cookie found: %v", &c)
+	}
+	if h1.Cookie(&c) {
+		t.Fatalf("Unexpected cookie found: %v", &c)
+	}
+
 	c.SetKey("йцук")
 	if !h1.Cookie(&c) {
 		t.Fatalf("cannot find cookie %q", c.Key())
 	}
 	if !equalCookie(&expectedC2, &c) {
 		t.Fatalf("unexpected cookie\n%v\nExpected\n%v\n", &c, &expectedC2)
+	}
+
+	h1.DelCookie("йцук")
+	if h.Cookie(&c) {
+		t.Fatalf("Unexpected cookie found: %v", &c)
+	}
+	if h1.Cookie(&c) {
+		t.Fatalf("Unexpected cookie found: %v", &c)
 	}
 }
 
@@ -1192,8 +1243,56 @@ func TestRequestHeaderCookie(t *testing.T) {
 	if !bytes.Equal(h1.Cookie("foo"), h.Cookie("foo")) {
 		t.Fatalf("Unexpected cookie value %q. Exepcted %q", h1.Cookie("foo"), h.Cookie("foo"))
 	}
+	h1.DelCookie("foo")
+	if len(h1.Cookie("foo")) > 0 {
+		t.Fatalf("Unexpected cookie found: %q", h1.Cookie("foo"))
+	}
 	if !bytes.Equal(h1.Cookie("привет"), h.Cookie("привет")) {
 		t.Fatalf("Unexpected cookie value %q. Expected %q", h1.Cookie("привет"), h.Cookie("привет"))
+	}
+	h1.DelCookie("привет")
+	if len(h1.Cookie("привет")) > 0 {
+		t.Fatalf("Unexpected cookie found: %q", h1.Cookie("привет"))
+	}
+
+	h.DelAllCookies()
+	if len(h.Cookie("foo")) > 0 {
+		t.Fatalf("Unexpected cookie found: %q", h.Cookie("foo"))
+	}
+	if len(h.Cookie("привет")) > 0 {
+		t.Fatalf("Unexpected cookie found: %q", h.Cookie("привет"))
+	}
+}
+
+func TestRequestHeaderMethod(t *testing.T) {
+	// common http methods
+	testRequestHeaderMethod(t, "GET")
+	testRequestHeaderMethod(t, "POST")
+	testRequestHeaderMethod(t, "HEAD")
+	testRequestHeaderMethod(t, "DELETE")
+
+	// non-http methods
+	testRequestHeaderMethod(t, "foobar")
+	testRequestHeaderMethod(t, "ABC")
+}
+
+func testRequestHeaderMethod(t *testing.T, expectedMethod string) {
+	var h RequestHeader
+	h.SetMethod(expectedMethod)
+	m := h.Method()
+	if string(m) != expectedMethod {
+		t.Fatalf("unexpected method: %q. Expecting %q", m, expectedMethod)
+	}
+
+	s := h.String()
+	var h1 RequestHeader
+	br := bufio.NewReader(bytes.NewBufferString(s))
+	if err := h1.Read(br); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	m1 := h1.Method()
+	if string(m) != string(m1) {
+		t.Fatalf("unexpected method: %q. Expecting %q", m, m1)
 	}
 }
 
@@ -1363,7 +1462,7 @@ func testResponseHeaderConnectionClose(t *testing.T, connectionClose bool) {
 }
 
 func TestRequestHeaderTooBig(t *testing.T) {
-	s := "GET / HTTP/1.1\r\nHost: aaa.com\r\n" + getHeaders(100500) + "\r\n"
+	s := "GET / HTTP/1.1\r\nHost: aaa.com\r\n" + getHeaders(10500) + "\r\n"
 	r := bytes.NewBufferString(s)
 	br := bufio.NewReaderSize(r, 4096)
 	h := &RequestHeader{}

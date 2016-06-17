@@ -4,12 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"pkg/echologger"
+	"time"
 
-	"gopkg.in/labstack/echo.v1"
-	"gopkg.in/labstack/echo.v1/middleware"
-
-	el "github.com/deoxxa/echo-logrus"
+	"github.com/Sirupsen/logrus"
+	"github.com/labstack/echo"
+	"github.com/labstack/echo/engine"
+	"github.com/labstack/echo/engine/standard"
+	"github.com/labstack/echo/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/satori/go.uuid"
 )
 
 var (
@@ -37,7 +41,7 @@ func init() {
 
 // App is the application.
 type App struct {
-	Mux      *echo.Echo
+	Mux      http.Handler
 	noteRepo NoteRepository
 	health   *Health
 }
@@ -49,8 +53,11 @@ type AppOption func(*App) error
 func NewApp(opts ...AppOption) (*App, error) {
 	e := echo.New()
 
+	std := standard.WithConfig(engine.Config{})
+	std.SetHandler(e)
+
 	a := &App{
-		Mux:      e,
+		Mux:      std,
 		noteRepo: defaultNoteRepository,
 		health:   defaultHealth,
 	}
@@ -66,9 +73,28 @@ func NewApp(opts ...AppOption) (*App, error) {
 	}
 
 	// middleware
-	e.Use(el.New())
 	e.Use(HitCounter())
-	e.Use(middleware.Recover())
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			reqID := c.Request().Header().Get("X-Request-Id")
+			if reqID == "" {
+				reqID = uuid.NewV4().String()
+				c.Request().Header().Set("X-Request-Id", reqID)
+
+			}
+
+			return next(c)
+		}
+	})
+
+	logger := logrus.New()
+	log := logrus.NewEntry(logger)
+	logmw := echologger.NewWithNameAndLogger("omniscient", log)
+	e.Use(logmw)
+
+	e.Use(middleware.RecoverWithConfig(middleware.RecoverConfig{
+		StackSize: 1 << 10, // 1 KB
+	}))
 
 	// routes
 	e.Post("/notes", a.createNote())
@@ -80,7 +106,9 @@ func NewApp(opts ...AppOption) (*App, error) {
 	e.Get("/healthz", a.healthz())
 	e.Get("/app/info", a.appInfo())
 
-	e.Get("/metrics", prometheus.Handler())
+	e.Get("/slow", a.slowResp())
+
+	e.Get("/metrics", standard.WrapHandler(prometheus.Handler()))
 
 	if a.health == nil {
 		return nil, errors.New("no health checker")
@@ -119,7 +147,7 @@ type updateNoteReq struct {
 }
 
 func (a *App) createNote() echo.HandlerFunc {
-	return func(c *echo.Context) error {
+	return func(c echo.Context) error {
 		cnr := &createNoteReq{}
 		if err := c.Bind(cnr); err != nil {
 			return err
@@ -138,7 +166,7 @@ func (a *App) createNote() echo.HandlerFunc {
 }
 
 func (a *App) retrieveNote() echo.HandlerFunc {
-	return func(c *echo.Context) error {
+	return func(c echo.Context) error {
 		id := c.Param("id")
 		note, err := a.noteRepo.Retrieve(id)
 		if err != nil {
@@ -153,7 +181,7 @@ func (a *App) retrieveNote() echo.HandlerFunc {
 }
 
 func (a *App) retrieveNotes() echo.HandlerFunc {
-	return func(c *echo.Context) error {
+	return func(c echo.Context) error {
 		notes, err := a.noteRepo.List()
 		if err != nil {
 			msg := map[string]interface{}{
@@ -167,7 +195,7 @@ func (a *App) retrieveNotes() echo.HandlerFunc {
 }
 
 func (a *App) updateNote() echo.HandlerFunc {
-	return func(c *echo.Context) error {
+	return func(c echo.Context) error {
 		id := c.Param("id")
 
 		cnr := &createNoteReq{}
@@ -204,7 +232,7 @@ func (a *App) updateNote() echo.HandlerFunc {
 // }
 
 func (a *App) healthz() echo.HandlerFunc {
-	return func(c *echo.Context) error {
+	return func(c echo.Context) error {
 		if a.health.IsOK() {
 			return c.String(http.StatusOK, "OK")
 		}
@@ -213,12 +241,19 @@ func (a *App) healthz() echo.HandlerFunc {
 	}
 }
 
+func (a *App) slowResp() echo.HandlerFunc {
+	return func(c echo.Context) error {
+		time.Sleep(1500 * time.Millisecond)
+		return c.String(http.StatusOK, "OK")
+	}
+}
+
 type appInfo struct {
 	Revision string `json:"revision"`
 }
 
 func (a *App) appInfo() echo.HandlerFunc {
-	return func(c *echo.Context) error {
+	return func(c echo.Context) error {
 		ai := appInfo{
 			Revision: revision,
 		}

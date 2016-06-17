@@ -1195,6 +1195,23 @@ var _ = Describe("Commands", func() {
 			Expect(hGet.Val()).To(Equal("hello2"))
 		})
 
+		It("should HMSetMap", func() {
+			hMSetMap := client.HMSetMap("hash", map[string]string{
+				"key3": "hello3",
+				"key4": "hello4",
+			})
+			Expect(hMSetMap.Err()).NotTo(HaveOccurred())
+			Expect(hMSetMap.Val()).To(Equal("OK"))
+
+			hGet := client.HGet("hash", "key3")
+			Expect(hGet.Err()).NotTo(HaveOccurred())
+			Expect(hGet.Val()).To(Equal("hello3"))
+
+			hGet = client.HGet("hash", "key4")
+			Expect(hGet.Err()).NotTo(HaveOccurred())
+			Expect(hGet.Val()).To(Equal("hello4"))
+		})
+
 		It("should HSet", func() {
 			hSet := client.HSet("hash", "key", "hello")
 			Expect(hSet.Err()).NotTo(HaveOccurred())
@@ -1802,6 +1819,34 @@ var _ = Describe("Commands", func() {
 			sMembers := client.SMembers("set")
 			Expect(sMembers.Err()).NotTo(HaveOccurred())
 			Expect(sMembers.Val()).To(HaveLen(2))
+
+		})
+
+		It("should SPopN", func() {
+			sAdd := client.SAdd("set", "one")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+			sAdd = client.SAdd("set", "two")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+			sAdd = client.SAdd("set", "three")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+			sAdd = client.SAdd("set", "four")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+
+			sPopN := client.SPopN("set", 1)
+			Expect(sPopN.Err()).NotTo(HaveOccurred())
+			Expect(sPopN.Val()).NotTo(Equal([]string{""}))
+
+			sMembers := client.SMembers("set")
+			Expect(sMembers.Err()).NotTo(HaveOccurred())
+			Expect(sMembers.Val()).To(HaveLen(3))
+
+			sPopN = client.SPopN("set", 4)
+			Expect(sPopN.Err()).NotTo(HaveOccurred())
+			Expect(sPopN.Val()).To(HaveLen(3))
+
+			sMembers = client.SMembers("set")
+			Expect(sMembers.Err()).NotTo(HaveOccurred())
+			Expect(sMembers.Val()).To(HaveLen(0))
 		})
 
 		It("should SRandMember and SRandMemberN", func() {
