@@ -105,6 +105,14 @@ func NoteIDGenFn(idGen func() string) RedisNoteRepositoryOption {
 	}
 }
 
+// NoteBase is the base string for all note keys.
+func NoteBase(base string) RedisNoteRepositoryOption {
+	return func(rnr *RedisNoteRepository) error {
+		rnr.base = base
+		return nil
+	}
+}
+
 // Create creates a new note.
 func (nr *RedisNoteRepository) Create(content string) (*Note, error) {
 	now := time.Now()
